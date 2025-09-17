@@ -1,6 +1,3 @@
-# chess_ai_agent.py
-# Requirements: pip install pygame python-chess
-# Put stockfish exe in engine/stockfish-windows-x86-64-avx2.exe (or change ENGINE_PATH)
 
 import os
 import sys
@@ -10,11 +7,12 @@ import pygame
 import chess
 import chess.engine
 
-# ---------------- CONFIG ----------------
+
 ENGINE_PATH = os.path.join("engine", "stockfish-windows-x86-64-avx2.exe")
-BOARD_SIZE = 800
+BOARD_SIZE = 640  # smaller than before
 SQUARE_SIZE = BOARD_SIZE // 8
 FPS = 60
+INFO_HEIGHT = 120  # bottom area for moves/status
 
 # Colors
 LIGHT = (240, 217, 181)
@@ -22,22 +20,33 @@ DARK = (181, 136, 99)
 HIGHLIGHT = (100, 200, 255)
 LAST_MOVE_COL = (120, 220, 120)
 SELECT_COL = (200, 120, 20)
-TEXT_LIGHT = (20, 20, 20)
-TEXT_DARK = (245, 245, 245)
 RESULT_COL = (220, 40, 40)
-
-# two-letter piece labels (lowercase used for black, uppercase shown for white)
-PIECE_ABBR = {'p': 'pa', 'n': 'kn', 'b': 'bi', 'r': 'ro', 'q': 'qu', 'k': 'ki'}
+TEXT_COLOR = (20, 20, 20)
 
 # ---------------- Setup ----------------
 pygame.init()
 pygame.font.init()
-FONT = pygame.font.SysFont("DejaVuSans", 40, bold=True)
-SMALL_FONT = pygame.font.SysFont("DejaVuSans", 22)
-WIN = pygame.display.set_mode((BOARD_SIZE, BOARD_SIZE + 60))
+FONT = pygame.font.SysFont("DejaVuSans", 36, bold=True)
+SMALL_FONT = pygame.font.SysFont("DejaVuSans", 18)
+WIN = pygame.display.set_mode((BOARD_SIZE, BOARD_SIZE + INFO_HEIGHT))
 pygame.display.set_caption("Play vs Stockfish - Click to move | ← back  → forward  ↓ live  R reset")
 
-# Ask difficulty in console (no tkinter)
+# Load piece images with correct knight key
+PIECE_IMAGES = {}
+PIECE_FOLDER = "pieces"
+key_map = {'pawn':'p','knight':'n','bishop':'b','rook':'r','queen':'q','king':'k'}
+for color in ["white", "black"]:
+    for piece in ["pawn", "knight", "bishop", "rook", "queen", "king"]:
+        filename = f"{color}-{piece}.png"
+        path = os.path.join(PIECE_FOLDER, filename)
+        if os.path.exists(path):
+            img = pygame.image.load(path)
+            key = color[0] + key_map[piece]
+            PIECE_IMAGES[key] = pygame.transform.smoothscale(img, (SQUARE_SIZE, SQUARE_SIZE))
+        else:
+            print("Missing image:", path)
+
+# Ask difficulty
 try:
     level = int(input("Choose Stockfish difficulty (1-20), Enter for default 5: ") or 5)
 except Exception:
@@ -45,17 +54,15 @@ except Exception:
 level = max(1, min(20, level))
 print("Skill level set to", level)
 
-# Engine setup (use python-chess engine)
+# Engine setup
 engine = None
-time_per_move = max(0.05, 0.05 + level * 0.07)  # seconds to give the engine per move (demo)
+time_per_move = max(0.05, 0.05 + level * 0.07)
 if os.path.exists(ENGINE_PATH):
     try:
         engine = chess.engine.SimpleEngine.popen_uci(ENGINE_PATH)
-        # try to configure skill (some builds accept 'Skill Level')
         try:
             engine.configure({'Skill Level': level})
         except Exception:
-            # fallback: limit strength via elo (best-effort)
             try:
                 engine.configure({'UCI_LimitStrength': True, 'UCI_Elo': 800 + level * 100})
             except Exception:
@@ -69,17 +76,16 @@ else:
 
 # Game state
 board = chess.Board()
-move_history = []         # list of chess.Move objects (both players)
-history_pointer = 0       # how many moves are currently applied (0..len(move_history))
+move_history = []
+history_pointer = 0
 selected_square = None
 legal_moves_for_sel = []
 last_player_move_time = None
 ai_is_thinking = False
-human_color = chess.WHITE  # you play White by default
+human_color = chess.WHITE
 
 # ---------------- helpers ----------------
 def square_to_pixel(sq):
-    """Return (x,y) top-left pixel for a chess.square index."""
     file = chess.square_file(sq)
     rank = chess.square_rank(sq)
     x = file * SQUARE_SIZE
@@ -102,14 +108,12 @@ def update_board_from_history():
         board.push(mv)
 
 def push_move_and_record(move):
-    """Push a move onto board and record in history (used for player and AI)."""
     global move_history, history_pointer
     board.push(move)
     move_history.append(move)
     history_pointer = len(move_history)
 
 def ai_make_move():
-    """Make AI move using engine or random fallback. Updates history."""
     global ai_is_thinking
     if board.is_game_over():
         return
@@ -120,14 +124,12 @@ def ai_make_move():
             res = engine.play(board, limit)
             best = res.move
             if best is None:
-                # fallback
                 best = random.choice(list(board.legal_moves))
         else:
             best = random.choice(list(board.legal_moves))
         push_move_and_record(best)
     except Exception as e:
         print("AI move error:", e)
-        # fallback random
         try:
             mv = random.choice(list(board.legal_moves))
             push_move_and_record(mv)
@@ -155,41 +157,56 @@ def draw_board():
         last = move_history[history_pointer - 1]
         fx, fy = square_to_pixel(last.from_square)
         tx, ty = square_to_pixel(last.to_square)
-        pygame.draw.rect(WIN, LAST_MOVE_COL, (fx, fy, SQUARE_SIZE, SQUARE_SIZE), 6)
-        pygame.draw.rect(WIN, LAST_MOVE_COL, (tx, ty, SQUARE_SIZE, SQUARE_SIZE), 6)
+        pygame.draw.rect(WIN, LAST_MOVE_COL, (fx, fy, SQUARE_SIZE, SQUARE_SIZE), 4)
+        pygame.draw.rect(WIN, LAST_MOVE_COL, (tx, ty, SQUARE_SIZE, SQUARE_SIZE), 4)
 
     # highlight selected & legal targets
     if selected_square is not None:
         sx, sy = square_to_pixel(selected_square)
-        pygame.draw.rect(WIN, SELECT_COL, (sx, sy, SQUARE_SIZE, SQUARE_SIZE), 6)
+        pygame.draw.rect(WIN, SELECT_COL, (sx, sy, SQUARE_SIZE, SQUARE_SIZE), 4)
         for mv in legal_moves_for_sel:
             tx, ty = square_to_pixel(mv.to_square)
-            pygame.draw.circle(WIN, HIGHLIGHT, (tx + SQUARE_SIZE//2, ty + SQUARE_SIZE//2), 14)
+            pygame.draw.circle(WIN, HIGHLIGHT, (tx + SQUARE_SIZE//2, ty + SQUARE_SIZE//2), 10)
 
-    # pieces (draw labels)
+    # pieces (draw images)
     for sq in chess.SQUARES:
         piece = board.piece_at(sq)
         if piece:
             x, y = square_to_pixel(sq)
-            abbr = PIECE_ABBR[piece.symbol().lower()]
-            label = abbr.upper() if piece.color == chess.WHITE else abbr.lower()
-            # choose contrasting color for text
-            text_color = TEXT_LIGHT if is_light_square(sq) else TEXT_DARK
-            surf = FONT.render(label, True, text_color)
-            rect = surf.get_rect(center=(x + SQUARE_SIZE//2, y + SQUARE_SIZE//2))
-            WIN.blit(surf, rect)
+            color = 'w' if piece.color == chess.WHITE else 'b'
+            name = ''
+            if piece.piece_type == chess.PAWN: name = 'p'
+            elif piece.piece_type == chess.KNIGHT: name = 'n'
+            elif piece.piece_type == chess.BISHOP: name = 'b'
+            elif piece.piece_type == chess.ROOK: name = 'r'
+            elif piece.piece_type == chess.QUEEN: name = 'q'
+            elif piece.piece_type == chess.KING: name = 'k'
+            key = color + name
+            img = PIECE_IMAGES.get(key)
+            if img:
+                WIN.blit(img, (x, y))
 
-    # bottom info
+    # bottom info area
+    pygame.draw.rect(WIN, (50,50,50), (0, BOARD_SIZE, BOARD_SIZE, INFO_HEIGHT))
+    
+    # status line
     status = "Your turn" if board.turn == human_color and not board.is_game_over() else ("AI thinking..." if ai_is_thinking else "AI's turn" if not board.is_game_over() else "Game over")
-    info_surf = SMALL_FONT.render(f"{status}    (← back  → forward  ↓ live  R reset)", True, (230,230,230))
+    info_surf = SMALL_FONT.render(f"{status}", True, (230,230,230))
     WIN.blit(info_surf, (10, BOARD_SIZE + 5))
+
+    # move history display
+    moves_text = " ".join([mv.uci() for mv in move_history])
+    moves_lines = [moves_text[i:i+80] for i in range(0, len(moves_text), 80)]  # wrap text
+    for idx, line in enumerate(moves_lines):
+        line_surf = SMALL_FONT.render(line, True, (240,240,240))
+        WIN.blit(line_surf, (10, BOARD_SIZE + 30 + idx*20))
 
     # show result if game over
     if board.is_game_over():
-        res = board.result()  # "1-0","0-1","1/2-1/2"
+        res = board.result()
         text = "Draw" if res == "1/2-1/2" else ("White wins" if res == "1-0" else "Black wins")
         res_surf = FONT.render(f"Game Over: {text}", True, RESULT_COL)
-        rect = res_surf.get_rect(center=(BOARD_SIZE//2, BOARD_SIZE + 30))
+        rect = res_surf.get_rect(center=(BOARD_SIZE//2, BOARD_SIZE + INFO_HEIGHT//2))
         WIN.blit(res_surf, rect)
 
     pygame.display.flip()
@@ -207,7 +224,6 @@ def main():
         clock.tick(FPS)
         draw_board()
 
-        # If it's AI's turn and we have just made a player move, wait 1s then make AI move
         if not board.is_game_over() and board.turn != human_color and last_player_move_time is not None:
             if time.time() - last_player_move_time >= 1 and not ai_is_thinking:
                 ai_make_move()
@@ -218,7 +234,6 @@ def main():
                 running = False
 
             elif event.type == pygame.KEYDOWN:
-                # history navigation
                 if event.key == pygame.K_LEFT:
                     if history_pointer > 0:
                         history_pointer -= 1
@@ -231,7 +246,6 @@ def main():
                     history_pointer = len(move_history)
                     update_board_from_history()
                 elif event.key == pygame.K_r:
-                    # reset game
                     board.reset()
                     move_history = []
                     history_pointer = 0
@@ -241,16 +255,13 @@ def main():
                     print("Board reset.")
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                # Only allow interaction in live mode (history_pointer at latest)
                 mx, my = event.pos
                 if my >= BOARD_SIZE:
-                    continue  # clicked below board (info area)
+                    continue
                 if history_pointer != len(move_history):
-                    # jump to live automatically when user clicks to play
                     history_pointer = len(move_history)
                     update_board_from_history()
 
-                # only player's turn can select/move (human_color)
                 if board.is_game_over():
                     continue
 
@@ -258,21 +269,14 @@ def main():
                 if clicked_sq is None:
                     continue
 
-                # selecting
                 if selected_square is None:
                     piece = board.piece_at(clicked_sq)
                     if piece and piece.color == human_color and board.turn == human_color:
                         selected_square = clicked_sq
-                        # calc legal moves from this square
                         legal_moves_for_sel = [mv for mv in board.legal_moves if mv.from_square == selected_square]
-                        # debug:
-                        # print("Selected", selected_square, "legal:", [m.uci() for m in legal_moves_for_sel])
                 else:
-                    # attempt move from selected_square to clicked_sq
-                    # handle promotion auto to queen if needed
                     mv = chess.Move(selected_square, clicked_sq)
                     if mv not in board.legal_moves:
-                        # try promotion (auto queen) for pawn
                         if (board.piece_at(selected_square) and board.piece_at(selected_square).piece_type == chess.PAWN):
                             mvq = chess.Move(selected_square, clicked_sq, promotion=chess.QUEEN)
                             if mvq in board.legal_moves:
@@ -282,13 +286,10 @@ def main():
                         selected_square = None
                         legal_moves_for_sel = []
                         last_player_move_time = time.time()
-                        # if AI should play immediately (we wait 1s above)
                     else:
-                        # invalid move or not player's turn: deselect
                         selected_square = None
                         legal_moves_for_sel = []
 
-    # END loop
     pygame.quit()
     if engine:
         try:
