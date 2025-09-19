@@ -9,12 +9,12 @@ import chess.engine
 
 
 ENGINE_PATH = os.path.join("engine", "stockfish-windows-x86-64-avx2.exe")
-BOARD_SIZE = 640  # smaller than before
+BOARD_SIZE = 640  
 SQUARE_SIZE = BOARD_SIZE // 8
 FPS = 60
-INFO_HEIGHT = 120  # bottom area for moves/status
+INFO_HEIGHT = 120  
 
-# Colors
+
 LIGHT = (240, 217, 181)
 DARK = (181, 136, 99)
 HIGHLIGHT = (100, 200, 255)
@@ -23,7 +23,7 @@ SELECT_COL = (200, 120, 20)
 RESULT_COL = (220, 40, 40)
 TEXT_COLOR = (20, 20, 20)
 
-# ---------------- Setup ----------------
+
 pygame.init()
 pygame.font.init()
 FONT = pygame.font.SysFont("DejaVuSans", 36, bold=True)
@@ -31,7 +31,7 @@ SMALL_FONT = pygame.font.SysFont("DejaVuSans", 18)
 WIN = pygame.display.set_mode((BOARD_SIZE, BOARD_SIZE + INFO_HEIGHT))
 pygame.display.set_caption("Play vs Stockfish - Click to move | ← back  → forward  ↓ live  R reset")
 
-# Load piece images with correct knight key
+
 PIECE_IMAGES = {}
 PIECE_FOLDER = "pieces"
 key_map = {'pawn':'p','knight':'n','bishop':'b','rook':'r','queen':'q','king':'k'}
@@ -46,7 +46,7 @@ for color in ["white", "black"]:
         else:
             print("Missing image:", path)
 
-# Ask difficulty
+
 try:
     level = int(input("Choose Stockfish difficulty (1-20), Enter for default 5: ") or 5)
 except Exception:
@@ -54,7 +54,6 @@ except Exception:
 level = max(1, min(20, level))
 print("Skill level set to", level)
 
-# Engine setup
 engine = None
 time_per_move = max(0.05, 0.05 + level * 0.07)
 if os.path.exists(ENGINE_PATH):
@@ -74,7 +73,7 @@ if os.path.exists(ENGINE_PATH):
 else:
     print("Engine exe not found at", ENGINE_PATH, "- falling back to random AI.")
 
-# Game state
+
 board = chess.Board()
 move_history = []
 history_pointer = 0
@@ -84,7 +83,7 @@ last_player_move_time = None
 ai_is_thinking = False
 human_color = chess.WHITE
 
-# ---------------- helpers ----------------
+
 def square_to_pixel(sq):
     file = chess.square_file(sq)
     rank = chess.square_rank(sq)
@@ -144,7 +143,7 @@ def is_light_square(sq):
 
 def draw_board():
     WIN.fill((10,10,10))
-    # squares
+
     for r in range(8):
         for c in range(8):
             x = c * SQUARE_SIZE
@@ -152,7 +151,7 @@ def draw_board():
             color = LIGHT if (r + c) % 2 == 0 else DARK
             pygame.draw.rect(WIN, color, (x, y, SQUARE_SIZE, SQUARE_SIZE))
 
-    # highlight last move
+   
     if history_pointer > 0:
         last = move_history[history_pointer - 1]
         fx, fy = square_to_pixel(last.from_square)
@@ -160,7 +159,7 @@ def draw_board():
         pygame.draw.rect(WIN, LAST_MOVE_COL, (fx, fy, SQUARE_SIZE, SQUARE_SIZE), 4)
         pygame.draw.rect(WIN, LAST_MOVE_COL, (tx, ty, SQUARE_SIZE, SQUARE_SIZE), 4)
 
-    # highlight selected & legal targets
+    
     if selected_square is not None:
         sx, sy = square_to_pixel(selected_square)
         pygame.draw.rect(WIN, SELECT_COL, (sx, sy, SQUARE_SIZE, SQUARE_SIZE), 4)
@@ -168,7 +167,7 @@ def draw_board():
             tx, ty = square_to_pixel(mv.to_square)
             pygame.draw.circle(WIN, HIGHLIGHT, (tx + SQUARE_SIZE//2, ty + SQUARE_SIZE//2), 10)
 
-    # pieces (draw images)
+    
     for sq in chess.SQUARES:
         piece = board.piece_at(sq)
         if piece:
@@ -186,22 +185,22 @@ def draw_board():
             if img:
                 WIN.blit(img, (x, y))
 
-    # bottom info area
+   
     pygame.draw.rect(WIN, (50,50,50), (0, BOARD_SIZE, BOARD_SIZE, INFO_HEIGHT))
     
-    # status line
+   
     status = "Your turn" if board.turn == human_color and not board.is_game_over() else ("AI thinking..." if ai_is_thinking else "AI's turn" if not board.is_game_over() else "Game over")
     info_surf = SMALL_FONT.render(f"{status}", True, (230,230,230))
     WIN.blit(info_surf, (10, BOARD_SIZE + 5))
 
-    # move history display
+    
     moves_text = " ".join([mv.uci() for mv in move_history])
     moves_lines = [moves_text[i:i+80] for i in range(0, len(moves_text), 80)]  # wrap text
     for idx, line in enumerate(moves_lines):
         line_surf = SMALL_FONT.render(line, True, (240,240,240))
         WIN.blit(line_surf, (10, BOARD_SIZE + 30 + idx*20))
 
-    # show result if game over
+  
     if board.is_game_over():
         res = board.result()
         text = "Draw" if res == "1/2-1/2" else ("White wins" if res == "1-0" else "Black wins")
@@ -211,7 +210,7 @@ def draw_board():
 
     pygame.display.flip()
 
-# ---------------- Main Loop ----------------
+
 def main():
     global selected_square, legal_moves_for_sel, last_player_move_time, history_pointer, move_history, board, ai_is_thinking
     clock = pygame.time.Clock()
